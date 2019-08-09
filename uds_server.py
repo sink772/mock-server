@@ -12,14 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import plyvel
 import os
+import re
 import socket
 import sys
-import re
+import time
 from copy import copy
 from typing import Any, Tuple, Union
 
+import plyvel
 from mock_server.message_handler import Message, MessageHandler, int_to_bytes, bytes_to_int
 
 server_address = '/tmp/ee.socket'
@@ -95,7 +96,7 @@ class Address(object):
             return "cx" + body
 
 
-hello_jar_path = '/ws/core2/java-executor/target/hello/hello-1.0-SNAPSHOT.jar'
+hello_jar_path = '/ws/core2/java-executor/target/hello2/hello-1.0-SNAPSHOT.jar'
 token_score_path = '/ws/docker/test_pyexec/test_score/sample_token'
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -113,7 +114,7 @@ requests = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         '<install>',
-        []
+        ['Hello World']
     ],
     [
         hello_jar_path,
@@ -153,7 +154,7 @@ requests = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'setString',
-        ['Hello World']
+        ['Hello Alice']
     ],
     [
         hello_jar_path,
@@ -360,10 +361,10 @@ class MessageHandlerServer(MessageHandler):
             Info.TX_INDEX: 0,
             Info.TX_HASH: bytes.fromhex('49a1149d2e607c1b08f17f587d8a99c5a675f8e7eaae13d33a7df57aefeeae4f'),
             Info.TX_FROM: owner_address,
-            Info.TX_TIMESTAMP: 0x573117f1d6568,
+            Info.TX_TIMESTAMP: int(time.time() * 10**6),
             Info.TX_NONCE: 1,
             Info.BLOCK_HEIGHT: 0x100,
-            Info.BLOCK_TIMESTAMP: 0x57ca55a763690,
+            Info.BLOCK_TIMESTAMP: int(time.time() * 10**6),
             Info.CONTRACT_OWNER: owner_address,
             Info.STEP_COSTS: {
                 STEP_TYPE_CONTRACT_CALL: 25_000,
