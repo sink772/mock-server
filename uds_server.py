@@ -96,7 +96,9 @@ class Address(object):
             return "cx" + body
 
 
+token_jar_path = '/ws/core2/java-executor/target/sample_token/sample_token-optimized.jar'
 hello_jar_path = '/ws/core2/java-executor/target/hello2/hello-1.0-SNAPSHOT.jar'
+
 token_score_path = '/ws/docker/test_pyexec/test_score/sample_token'
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -105,7 +107,73 @@ crowdsale_address = Address('cx0000abcd31e819838e1f308287f9530150200000')
 owner_address = Address('hxe7af5fcfd8dfc67530a01a0e403882687528dfcb')
 alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 
-requests = [
+requests_sample_token = [
+    # deploy jar
+    [
+        token_jar_path,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        '<install>',
+        []
+    ],
+    # TODO: initialize the contract (this should be combined with the '<install>' command later
+    [
+        token_jar_path,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'onInstall',
+        ['MySampleToken', 'MST', 9, 1000]
+    ],
+    [
+        token_jar_path,
+        True,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'balanceOf',
+        [owner_address]
+    ],
+    # transfer some tokens to Alice
+    [
+        token_jar_path,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'transfer',
+        [alice_address, 1_000_000]
+    ],
+    [
+        token_jar_path,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'transfer',
+        [Address('hx' + 'b'*40), 1_000_000]
+    ],
+    [
+        token_jar_path,
+        True,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'balanceOf',
+        [owner_address]
+    ],
+]
+
+requests_hello = [
     [
         hello_jar_path,
         False,
@@ -166,85 +234,11 @@ requests = [
         'getString',
         []
     ],
-    # [
-    #     token_score_path,
-    #     True,
-    #     owner_address.to_bytes(),
-    #     token_score_address.to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x1000),
-    #     'balanceOf',
-    #     [owner_address, 0x1000, "param1"]
-    # ],
-    # # sending 1 icx to Alice from score
-    # [
-    #     token_score_path,
-    #     False,
-    #     Address(owner_address).to_bytes(),
-    #     Address(token_score_address).to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x10000),
-    #     'icxTransfer',
-    #     {'_to': alice_address, '_value': '0xde0b6b3a7640000'}
-    # ]
-    # # sending 1 token to Alice
-    # [
-    #     token_score_path,
-    #     False,
-    #     Address(owner_address).to_bytes(),
-    #     Address(token_score_address).to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x10000),
-    #     'transfer',
-    #     {'_to': alice_address, '_value': '0xde0b6b3a7640000'}
-    # ],
-    # # sending 100 tokens to crowdsale score
-    # [
-    #     token_score_path,
-    #     False,
-    #     Address(owner_address).to_bytes(),
-    #     Address(token_score_address).to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x10000),
-    #     'transfer',
-    #     {'_to': crowdsale_address, '_value': '0x56bc75e2d63100000'}
-    # ],
-    # [
-    #     token_score_path,
-    #     True,
-    #     Address(owner_address).to_bytes(),
-    #     Address(token_score_address).to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x1000),
-    #     'balanceOf',
-    #     {'_owner': owner_address}
-    # ],
-    # # sending ALL tokens to owner
-    # [
-    #     token_score_path,
-    #     False,
-    #     Address(crowdsale_address).to_bytes(),
-    #     Address(token_score_address).to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x10000),
-    #     'transferAll',
-    #     {'_to': owner_address}
-    # ],
-    # [
-    #     token_score_path,
-    #     True,
-    #     owner_address.to_bytes(),
-    #     token_score_address.to_bytes(),
-    #     int_to_bytes(0),
-    #     int_to_bytes(0x1000),
-    #     'balanceOf',
-    #     [crowdsale_address]
-    # ]
 ]
 
 
 def get_requests():
-    for req in requests:
+    for req in requests_sample_token:
         yield req
 
 
@@ -464,7 +458,7 @@ class MessageHandlerServer(MessageHandler):
         self._send_request(next(self._requests))
 
     def _handle_getbalance(self, data):
-        print('[handle_getbalance]', data)
+        print('[handle_getbalance]')
         addr = Address(data)
         print(f'  -- address = {addr}')
         self.send_msg(Message.GETBALANCE, int_to_bytes(10**18))
