@@ -96,6 +96,8 @@ class Address(object):
             return "cx" + body
 
 
+PLYVEL_DB_PATH = '/ws/core2/java-executor/target/sample_token/db'
+
 token_jar_path = '/ws/core2/java-executor/target/sample_token/sample_token-optimized.jar'
 hello_jar_path = '/ws/core2/java-executor/target/hello2/hello-1.0-SNAPSHOT.jar'
 
@@ -247,8 +249,7 @@ class MessageHandlerServer(MessageHandler):
     def __init__(self, conn: socket):
         super().__init__(conn)
         self._uid = 0
-        self._db = plyvel.DB('/ws/docker/test_pyexec/.statedb/pyexec',  # TODO: TEMP
-                             create_if_missing=True)
+        self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
         self._requests = get_requests()
         self._req_stack = []
 
@@ -407,7 +408,7 @@ class MessageHandlerServer(MessageHandler):
             ])
 
     def _handle_getvalue(self, key):
-        print('_handle_getvalue:', key)
+        print('[handle_getvalue]', key)
         value = self._db.get(key)
         if value is not None:
             success = True
@@ -420,7 +421,7 @@ class MessageHandlerServer(MessageHandler):
         ])
 
     def _handle_setvalue(self, data):
-        print('_handle_setvalue:', data)
+        print('[handle_setvalue]', data)
         key = data[0]
         is_delete = data[1]
         value = data[2]
