@@ -38,6 +38,8 @@ class Message(object):
     GETINFO = 7
     GETBALANCE = 8
     GETAPI = 9
+    LOG = 10
+    CLOSE = 11
 
 
 class MessageHandler(object):

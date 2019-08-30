@@ -349,6 +349,7 @@ class MessageHandlerServer(MessageHandler):
         step_used = self.decode(TypeTag.INT, data[1])
         ret = self.decode_any(data[2])
         print(f'  <<< {status}, {step_used}, {ret}')
+        return status
 
     def _handle_getinfo(self, data):
         print('[handle_getinfo]', data)
@@ -487,16 +488,20 @@ class MessageHandlerServer(MessageHandler):
                 if ret:
                     self._send_getapi(token_score_path)
             elif msg == Message.RESULT:
-                self._handle_result(data)
+                failed = self._handle_result(data)
                 self._req_stack.pop()
                 if len(self._req_stack) > 0:
                     self.send_msg(Message.RESULT, data)
                 else:
+                    if failed:
+                        print('Request has failed!')
+                        break
                     try:
                         self._send_request(next(self._requests))
                     except StopIteration:
-                        print('End of requests')
-                        # break
+                        print('End of requests.\n')
+                        self.send_msg(Message.CLOSE, b'')
+                        break
             elif msg == Message.GETINFO:
                 self._handle_getinfo(data)
             elif msg == Message.CALL:
