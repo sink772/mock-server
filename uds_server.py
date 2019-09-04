@@ -96,12 +96,12 @@ class Address(object):
             return "cx" + body
 
 
-PLYVEL_DB_PATH = '/ws/core2/java-executor/target/sample_token/db'
+TARGET_ROOT = '/ws/core2/java-executor/target'
 
-token_jar_path = '/ws/core2/java-executor/target/sample_token/optimized.jar'
-hello_jar_path = '/ws/core2/java-executor/target/hello2/hello-1.0-SNAPSHOT.jar'
+SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
+PLYVEL_DB_PATH = SAMPLE_TOKEN + '/db'
+token_jar_path = SAMPLE_TOKEN + '/optimized.jar'
 
-token_score_path = '/ws/docker/test_pyexec/test_score/sample_token'
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
 crowdsale_address = Address('cx0000abcd31e819838e1f308287f9530150200000')
@@ -172,69 +172,6 @@ requests_sample_token = [
         int_to_bytes(10_000_000),
         'balanceOf',
         [owner_address]
-    ],
-]
-
-requests_hello = [
-    [
-        hello_jar_path,
-        False,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        '<install>',
-        ['Hello World']
-    ],
-    [
-        hello_jar_path,
-        True,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        'sayHello',
-        []
-    ],
-    [
-        hello_jar_path,
-        True,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        'greet',
-        ['Alice']
-    ],
-    [
-        hello_jar_path,
-        True,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        'getString',
-        []
-    ],
-    [
-        hello_jar_path,
-        True,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        'setString',
-        ['Hello Alice']
-    ],
-    [
-        hello_jar_path,
-        True,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        'getString',
-        []
     ],
 ]
 
@@ -486,7 +423,7 @@ class MessageHandlerServer(MessageHandler):
             if msg == Message.CONNECT:
                 ret = self._handle_connect(data)
                 if ret:
-                    self._send_getapi(token_score_path)
+                    self._send_getapi(token_jar_path)
             elif msg == Message.RESULT:
                 failed = self._handle_result(data)
                 self._req_stack.pop()
