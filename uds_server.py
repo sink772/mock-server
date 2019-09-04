@@ -98,7 +98,7 @@ class Address(object):
 
 PLYVEL_DB_PATH = '/ws/core2/java-executor/target/sample_token/db'
 
-token_jar_path = '/ws/core2/java-executor/target/sample_token/sample_token-optimized.jar'
+token_jar_path = '/ws/core2/java-executor/target/sample_token/optimized.jar'
 hello_jar_path = '/ws/core2/java-executor/target/hello2/hello-1.0-SNAPSHOT.jar'
 
 token_score_path = '/ws/docker/test_pyexec/test_score/sample_token'
