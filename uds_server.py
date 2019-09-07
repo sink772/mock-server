@@ -100,7 +100,7 @@ TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
 PLYVEL_DB_PATH = SAMPLE_TOKEN + '/db'
-token_jar_path = SAMPLE_TOKEN + '/optimized.jar'
+token_score_path = SAMPLE_TOKEN + '/optimized.jar'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -110,9 +110,9 @@ owner_address = Address('hxe7af5fcfd8dfc67530a01a0e403882687528dfcb')
 alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 
 requests_sample_token = [
-    # deploy jar
+    # === Java deployment ===
     [
-        token_jar_path,
+        token_score_path,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
@@ -123,17 +123,17 @@ requests_sample_token = [
     ],
     # TODO: initialize the contract (this should be combined with the '<install>' command later
     [
-        token_jar_path,
+        token_score_path,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'onInstall',
-        ['MySampleToken', 'MST', 9, 1000]
+        ['MySampleToken', 'MST', 18, 1000]
     ],
     [
-        token_jar_path,
+        token_score_path,
         True,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
@@ -144,27 +144,27 @@ requests_sample_token = [
     ],
     # transfer some tokens to Alice
     [
-        token_jar_path,
+        token_score_path,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [alice_address, 1_000_000]
+        [alice_address, 10**18]
     ],
     [
-        token_jar_path,
+        token_score_path,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [Address('hx' + 'b'*40), 1_000_000]
+        [Address('hx' + 'b'*40), 10**18]
     ],
     [
-        token_jar_path,
+        token_score_path,
         True,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
@@ -174,6 +174,18 @@ requests_sample_token = [
         [owner_address]
     ],
 ]
+
+# # === Python deployment ===
+# [
+#     token_score_path,
+#     False,
+#     owner_address.to_bytes(),
+#     token_score_address.to_bytes(),
+#     int_to_bytes(0),
+#     int_to_bytes(10_000_000),
+#     'on_install',
+#     [1000, 9]
+# ],
 
 
 def get_requests():
@@ -423,7 +435,7 @@ class MessageHandlerServer(MessageHandler):
             if msg == Message.CONNECT:
                 ret = self._handle_connect(data)
                 if ret:
-                    self._send_getapi(token_jar_path)
+                    self._send_getapi(token_score_path)
             elif msg == Message.RESULT:
                 failed = self._handle_result(data)
                 self._req_stack.pop()
