@@ -100,7 +100,8 @@ TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
 PLYVEL_DB_PATH = SAMPLE_TOKEN + '/db'
-token_score_path = SAMPLE_TOKEN + '/optimized.jar'
+token_score_origin = SAMPLE_TOKEN + '/dapp.jar'
+token_score_path = SAMPLE_TOKEN + '/optimized-debug.jar'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -176,16 +177,18 @@ requests_sample_token = [
 ]
 
 # # === Python deployment ===
-# [
-#     token_score_path,
-#     False,
-#     owner_address.to_bytes(),
-#     token_score_address.to_bytes(),
-#     int_to_bytes(0),
-#     int_to_bytes(10_000_000),
-#     'on_install',
-#     [1000, 9]
-# ],
+# requests_sample_token_py = [
+#     [
+#         token_score_path,
+#         False,
+#         owner_address.to_bytes(),
+#         token_score_address.to_bytes(),
+#         int_to_bytes(0),
+#         int_to_bytes(10_000_000),
+#         'on_install',
+#         [1000, 9]
+#     ],
+# ]
 
 
 def get_requests():
@@ -435,7 +438,7 @@ class MessageHandlerServer(MessageHandler):
             if msg == Message.CONNECT:
                 ret = self._handle_connect(data)
                 if ret:
-                    self._send_getapi(token_score_path)
+                    self._send_getapi(token_score_origin)
             elif msg == Message.RESULT:
                 failed = self._handle_result(data)
                 self._req_stack.pop()
@@ -463,6 +466,8 @@ class MessageHandlerServer(MessageHandler):
                 self._handle_getbalance(data)
             elif msg == Message.EVENT:
                 self._handle_event(data)
+            elif msg == Message.LOG:
+                print('[LOG]', data)
             else:
                 print(f'Invalid message received: {msg}')
                 break
