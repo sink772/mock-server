@@ -65,11 +65,12 @@ class Info(object):
 class Address(object):
     def __init__(self, obj):
         if isinstance(obj, bytes):
-            if len(obj) < 21:
+            if len(obj) != 21:
                 raise Exception("IllegalFormat")
             self.__bytes = copy(obj)
+            self.__check_prefix()
         elif isinstance(obj, str):
-            if len(obj) < 42:
+            if len(obj) != 42:
                 raise Exception("IllegalFormat")
             prefix = bytes([obj[:2] == "cx"])
             body = bytes.fromhex(obj[2:])
@@ -79,7 +80,7 @@ class Address(object):
 
     @staticmethod
     def from_str(s: str) -> 'Address':
-        if len(s) < 42:
+        if len(s) != 42:
             raise Exception("IllegalFormat")
         prefix = bytes([s[:2] == "cx"])
         body = bytes.fromhex(s[2:])
@@ -94,6 +95,11 @@ class Address(object):
             return "hx" + body
         else:
             return "cx" + body
+
+    def __check_prefix(self):
+        prefix = self.__bytes[0]
+        if prefix != 0 and prefix != 1:
+            raise Exception(f"IllegalFormat: prefix={hex(prefix)}")
 
 
 TARGET_ROOT = '/ws/core2/java-executor/target'
