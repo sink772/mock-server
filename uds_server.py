@@ -158,7 +158,7 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [alice_address, 10**18]
+        [alice_address, 10**18, b'Hello']
     ],
     [
         token_score_path,
@@ -168,7 +168,7 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [Address('hx' + 'b'*40), 10**18]
+        [Address('hx' + 'b'*40), 10**18, b'']
     ],
     [
         token_score_path,
