@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import os
 import re
-import socket
 import sys
 import time
 from copy import copy
 from typing import Any, Tuple, Union
 
 import plyvel
-from mock_server.message_handler import Message, MessageHandler, int_to_bytes, bytes_to_int
+from mock_server.message_proxy import Message, MessageProxy, int_to_bytes, bytes_to_int
 
 server_address = '/tmp/ee.socket'
 number_of_connections = 1
@@ -202,11 +202,90 @@ def get_requests():
         yield req
 
 
-class MessageHandlerServer(MessageHandler):
+def encode_any(o: Any) -> Tuple[int, Any]:
+    if o is None:
+        return TypeTag.NIL, b''
+    elif isinstance(o, dict):
+        m = {}
+        for k, v in o.items():
+            m[k] = encode_any(v)
+        return TypeTag.DICT, m
+    elif isinstance(o, list) or isinstance(o, tuple):
+        lst = []
+        for v in o:
+            lst.append(encode_any(v))
+        return TypeTag.LIST, lst
+    elif isinstance(o, bytes):
+        return TypeTag.BYTES, o
+    elif isinstance(o, str):
+        return TypeTag.STRING, o.encode('utf-8')
+    elif isinstance(o, bool):
+        if o:
+            return TypeTag.BOOL, b'\x01'
+        else:
+            return TypeTag.BOOL, b'\x00'
+    elif isinstance(o, int):
+        return TypeTag.INT, int_to_bytes(o)
+    elif isinstance(o, Address):
+        return TypeTag.ADDRESS, o.to_bytes()
+    else:
+        raise Exception(f"UnknownType: {type(o)}")
 
-    def __init__(self, conn: socket):
-        super().__init__(conn)
-        self._uid = 0
+
+def decode(tag: int, val: bytes) -> 'Any':
+    if tag == TypeTag.BYTES:
+        return val
+    elif tag == TypeTag.STRING:
+        return val.decode('utf-8')
+    elif tag == TypeTag.INT:
+        return bytes_to_int(val)
+    elif tag == TypeTag.BOOL:
+        if val == b'\x00':
+            return False
+        elif val == b'\x01':
+            return True
+        else:
+            raise Exception(f'IllegalBoolBytes{val.hex()})')
+    elif tag == TypeTag.ADDRESS:
+        return Address(val)
+    else:
+        raise Exception(f"UnknownType: {tag}")
+
+
+def decode_any(to: list) -> Any:
+    tag: int = to[0]
+    val: Union[bytes, dict, list] = to[1]
+    if tag == TypeTag.NIL:
+        return None
+    elif tag == TypeTag.DICT:
+        obj = {}
+        for k, v in val.items():
+            if isinstance(k, bytes):
+                k = k.decode('utf-8')
+            obj[k] = decode_any(v)
+        return obj
+    elif tag == TypeTag.LIST:
+        obj = []
+        for v in val:
+            obj.append(decode_any(v))
+        return obj
+    else:
+        return decode(tag, val)
+
+
+def decode_param(typ: str, val: bytes) -> Any:
+    # print(f'  ** typ={typ} val={val} len={len(val)}')
+    if typ == 'Address':
+        return decode(TypeTag.ADDRESS, val)
+    elif typ == 'int':
+        return decode(TypeTag.INT, val)
+    elif typ == 'bytes':
+        return decode(TypeTag.BYTES, val)
+
+
+class AsyncMessageHandler(object):
+    def __init__(self, proxy):
+        self._proxy = proxy
         self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
         self._requests = get_requests()
         self._req_stack = []
@@ -214,98 +293,41 @@ class MessageHandlerServer(MessageHandler):
     def close(self):
         self._db.close()
 
-    def encode_any(self, o: Any) -> Tuple[int, Any]:
-        if o is None:
-            return TypeTag.NIL, b''
-        elif isinstance(o, dict):
-            m = {}
-            for k, v in o.items():
-                m[k] = self.encode_any(v)
-            return TypeTag.DICT, m
-        elif isinstance(o, list) or isinstance(o, tuple):
-            lst = []
-            for v in o:
-                lst.append(self.encode_any(v))
-            return TypeTag.LIST, lst
-        elif isinstance(o, bytes):
-            return TypeTag.BYTES, o
-        elif isinstance(o, str):
-            return TypeTag.STRING, o.encode('utf-8')
-        elif isinstance(o, bool):
-            if o:
-                return TypeTag.BOOL, b'\x01'
-            else:
-                return TypeTag.BOOL, b'\x00'
-        elif isinstance(o, int):
-            return TypeTag.INT, int_to_bytes(o)
-        elif isinstance(o, Address):
-            return TypeTag.ADDRESS, o.to_bytes()
+    def send_msg(self, msg: int, data: Any):
+        self._proxy.send_msg(msg, data)
+
+    async def recv_msg(self) -> Tuple[int, Any]:
+        return await self._proxy.recv_msg()
+
+    async def _send_getapi(self, code_path):
+        print('[send_getapi]', code_path)
+        self.send_msg(Message.GETAPI, code_path)
+        msg, data = await self.recv_msg()
+        if msg != Message.GETAPI:
+            raise Exception(f'Unexpected Msg: {msg} != {Message.GETAPI}')
+        print(f'getapi ->')
+        status: int = data[0]
+        info: list = data[1]
+        if status == 0:
+            for api in info:
+                print(f"  - {api}")
         else:
-            raise Exception(f"UnknownType: {type(o)}")
+            raise Exception(f'GETAPI failed: {status}')
 
-    def decode(self, tag: int, val: bytes) -> 'Any':
-        if tag == TypeTag.BYTES:
-            return val
-        elif tag == TypeTag.STRING:
-            return val.decode('utf-8')
-        elif tag == TypeTag.INT:
-            return bytes_to_int(val)
-        elif tag == TypeTag.BOOL:
-            if val == b'\x00':
-                return False
-            elif val == b'\x01':
-                return True
-            else:
-                raise Exception(f'IllegalBoolBytes{val.hex()})')
-        elif tag == TypeTag.ADDRESS:
-            return Address(val)
-        else:
-            raise Exception(f"UnknownType: {tag}")
-
-    def decode_any(self, to: list) -> Any:
-        tag: int = to[0]
-        val: Union[bytes, dict, list] = to[1]
-        if tag == TypeTag.NIL:
-            return None
-        elif tag == TypeTag.DICT:
-            obj = {}
-            for k, v in val.items():
-                if isinstance(k, bytes):
-                    k = k.decode('utf-8')
-                obj[k] = self.decode_any(v)
-            return obj
-        elif tag == TypeTag.LIST:
-            obj = []
-            for v in val:
-                obj.append(self.decode_any(v))
-            return obj
-        else:
-            return self.decode(tag, val)
-
-    def decode_param(self, typ: str, val: bytes) -> Any:
-        # print(f'  ** typ={typ} val={val} len={len(val)}')
-        if typ == 'Address':
-            return self.decode(TypeTag.ADDRESS, val)
-        elif typ == 'int':
-            return self.decode(TypeTag.INT, val)
-        elif typ == 'bytes':
-            return self.decode(TypeTag.BYTES, val)
-
-    def _handle_connect(self, data) -> bool:
-        print('[handle_connect]', data)
-        version = data[0]
-        if version != version_number:
-            print(f'Error: version should be {version_number}, but {version}')
-            return False
-        self._uid = data[1]
-        print(f'version: {version}, uid: {self._uid}, eetype: {data[2]}')
-        return True
+    def _send_request(self, req):
+        print('\n[send_request]', req)
+        print(f'  >>> method: {req[6]}')
+        print(f'      params: {req[7]}')
+        if isinstance(req[7], list):
+            req[7] = encode_any(req[7])
+        self.send_msg(Message.INVOKE, req)
+        self._req_stack.append(req)
 
     def _handle_result(self, data):
         print('[handle_result]', data)
         status = data[0]
-        step_used = self.decode(TypeTag.INT, data[1])
-        ret = self.decode_any(data[2])
+        step_used = decode(TypeTag.INT, data[1])
+        ret = decode_any(data[2])
         print(f'  <<< {status}, {step_used}, {ret}')
         return status
 
@@ -331,16 +353,16 @@ class MessageHandlerServer(MessageHandler):
                 STEP_TYPE_API_CALL: 10000,
             }
         }
-        print(f'info -> {self.encode_any(info)}')
-        self.send_msg(Message.GETINFO, self.encode_any(info))
+        print(f'info -> {encode_any(info)}')
+        self.send_msg(Message.GETINFO, encode_any(info))
 
     def _handle_call(self, data):
         print('\n[handle_call]', data)
-        addr_to: Address = self.decode(TypeTag.ADDRESS, data[0])
-        value = self.decode(TypeTag.INT, data[1])
-        limit = self.decode(TypeTag.INT, data[2])
-        method = self.decode(TypeTag.STRING, data[3])
-        params = self.decode_any(data[4])
+        addr_to: Address = decode(TypeTag.ADDRESS, data[0])
+        value = decode(TypeTag.INT, data[1])
+        limit = decode(TypeTag.INT, data[2])
+        method = decode(TypeTag.STRING, data[3])
+        params = decode_any(data[4])
         print(f'  -- to={addr_to} value={value} limit={limit} method={method} params={params}')
 
         if addr_to == crowdsale_address:
@@ -358,12 +380,12 @@ class MessageHandlerServer(MessageHandler):
         elif method == 'fallback':
             print(f'[ICX Transfer] value={value}')
             self.send_msg(Message.RESULT, [
-                0, int_to_bytes(1000), self.encode_any(None)
+                0, int_to_bytes(1000), encode_any(None)
             ])
         else:
             self.send_msg(Message.RESULT, [
                 1, int_to_bytes(100),
-                self.encode_any({'error': {'code': 32601, 'message': 'Method not found'}})
+                encode_any({'error': {'code': 32601, 'message': 'Method not found'}})
             ])
 
     def _handle_getvalue(self, key):
@@ -390,33 +412,6 @@ class MessageHandlerServer(MessageHandler):
         else:
             self._db.put(key, value)
 
-    def _send_request(self, req):
-        print('\n[send_request]', req)
-        print(f'  >>> method: {req[6]}')
-        print(f'      params: {req[7]}')
-        if isinstance(req[7], list):
-            req[7] = self.encode_any(req[7])
-        self.send_msg(Message.INVOKE, req)
-        self._req_stack.append(req)
-
-    def _send_getapi(self, code_path):
-        print('[send_getapi]', code_path)
-        self.send_msg(Message.GETAPI, code_path)
-        msg, data = self.recv_msg()
-        if msg != Message.GETAPI:
-            raise Exception(f'Unexpected Msg: {msg} != {Message.GETAPI}')
-        print(f'getapi ->')
-        status: int = data[0]
-        info: list = data[1]
-        if status == 0:
-            for api in info:
-                print(f"  - {api}")
-        else:
-            print(f'getapi FAILED: {status}')
-
-        # send first invoke request
-        self._send_request(next(self._requests))
-
     def _handle_getbalance(self, data):
         print('[handle_getbalance]')
         addr = Address(data)
@@ -433,19 +428,21 @@ class MessageHandlerServer(MessageHandler):
         result = re.match('(\\S+?)\\((.+)\\)', sig.decode())
         params: list = result.group(2).split(',')
         for v in indexed[1:]:
-            print(f'  -- {self.decode_param(params.pop(0), v)}')
+            print(f'  -- {decode_param(params.pop(0), v)}')
         print('Data:')
         for v in data:
-            print(f'  -- {self.decode_param(params.pop(0), v)}')
+            print(f'  -- {decode_param(params.pop(0), v)}')
 
-    def process(self):
+    async def process(self):
+        # send GETAPI first
+        await self._send_getapi(token_score_origin)
+
+        # send first invoke request
+        self._send_request(next(self._requests))
+
         while True:
-            msg, data = self.recv_msg()
-            if msg == Message.CONNECT:
-                ret = self._handle_connect(data)
-                if ret:
-                    self._send_getapi(token_score_origin)
-            elif msg == Message.RESULT:
+            msg, data = await self.recv_msg()
+            if msg == Message.RESULT:
                 failed = self._handle_result(data)
                 self._req_stack.pop()
                 if len(self._req_stack) > 0:
@@ -478,38 +475,42 @@ class MessageHandlerServer(MessageHandler):
                 print(f'Invalid message received: {msg}')
                 break
 
+        # cleanup
+        self.close()
 
-def main():
+
+async def handle_connect(reader, writer):
+    print(f'New connection reader={reader}')
+    proxy = MessageProxy(reader, writer)
+    msg, data = await proxy.recv_msg()
+    print(f'[connect] {msg} {data}')
+    if msg == Message.CONNECT:
+        version = data[0]
+        if version != version_number:
+            print(f'Error: version should be {version_number}, but {version}')
+            return
+        uuid = data[1]
+        print(f'  - version: {version}, uuid: {uuid}, eetype: {data[2]}')
+        handler = AsyncMessageHandler(proxy)
+        asyncio.get_event_loop().create_task(handler.process())
+
+
+def async_main():
     # make sure the socket does not already exist
     if os.path.exists(server_address):
         os.unlink(server_address)
 
-    # create a UNIX domain socket
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-
-    # bind the socket to the address
-    print(f'starting up on {server_address}')
-    sock.bind(server_address)
-
-    # listen for incoming connections
-    sock.listen(number_of_connections)
-
-    while True:
-        # wait for a connection
-        print('waiting for a connection')
-        conn, addr = sock.accept()
-        print(f'connection from {addr.encode()}...')
-        handler = MessageHandlerServer(conn)
-        try:
-            handler.process()
-        finally:
-            # clean up the connection
-            handler.close()
-            conn.close()
+    print(f'waiting for a connection, sockaddr={server_address}')
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.start_unix_server(handle_connect, server_address))
+    try:
+        loop.run_forever()
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        sys.exit(async_main())
     except KeyboardInterrupt:
         print("exit")

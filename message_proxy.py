@@ -15,7 +15,6 @@
 from typing import Any, Tuple
 
 import msgpack
-import socket
 
 
 def int_to_bytes(v: int) -> bytes:
@@ -42,32 +41,28 @@ class Message(object):
     CLOSE = 11
 
 
-class MessageHandler(object):
+class MessageProxy(object):
     """ Message format
         msg: uint16
         data: any
     """
-    def __init__(self, conn: socket):
-        self._conn = conn
+    def __init__(self, reader, writer):
+        self._reader = reader
+        self._writer = writer
 
     def write(self, b: bytes) -> None:
-        self._conn.sendall(b)
+        self._writer.write(b)
 
-    def read(self, n=None) -> bytes:
+    async def read(self, n=None) -> bytes:
         if n is None:
-            n = 1024
-        return self._conn.recv(n)
-
-    def _send(self, msg: int, data: Any):
-        payload = [msg, data]
-        msgpack.dump(payload, self)
-
-    def _recv(self) -> Tuple[int, Any]:
-        msg = msgpack.load(self)
-        return msg[0], msg[1]
+            n = 8192
+        return await self._reader.read(n)
 
     def send_msg(self, msg: int, data: Any):
-        self._send(msg, data)
+        payload = [msg, data]
+        self.write(msgpack.packb(payload))
 
-    def recv_msg(self) -> Tuple[int, Any]:
-        return self._recv()
+    async def recv_msg(self) -> Tuple[int, Any]:
+        data = await self.read()
+        msg = msgpack.unpackb(data)
+        return msg[0], msg[1]
