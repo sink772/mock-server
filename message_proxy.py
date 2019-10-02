@@ -13,12 +13,18 @@
 # limitations under the License.
 
 from typing import Any, Tuple
-
 import msgpack
 
 
+class ManagerMessage(object):
+    VERSION = 100
+    RUN = 101
+    KILL = 102
+    END = 103
+
+
 class Message(object):
-    CONNECT = 0
+    VERSION = 0
     INVOKE = 1
     RESULT = 2
     GETVALUE = 3
@@ -46,7 +52,7 @@ class MessageProxy(object):
 
     async def read(self, n=None) -> bytes:
         if n is None:
-            n = 8192
+            n = 1024
         return await self._reader.read(n)
 
     def send_msg(self, msg: int, data: Any):

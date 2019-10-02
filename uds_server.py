@@ -16,10 +16,11 @@ import asyncio
 import os
 import re
 import time
+import uuid
 from typing import Any, Tuple
 
 import plyvel
-from .message_proxy import Message, MessageProxy
+from .message_proxy import Message, ManagerMessage, MessageProxy
 from .utils import int_to_bytes, encode_any, TypeTag, Address, decode, decode_any, decode_param
 
 server_address = '/tmp/ee.socket'
@@ -148,21 +149,26 @@ def get_requests():
         yield req
 
 
-class AsyncMessageHandler(object):
+class Proxy(object):
     def __init__(self, proxy):
         self._proxy = proxy
-        self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
-        self._requests = get_requests()
-        self._req_stack = []
-
-    def close(self):
-        self._db.close()
 
     def send_msg(self, msg: int, data: Any):
         self._proxy.send_msg(msg, data)
 
     async def recv_msg(self) -> Tuple[int, Any]:
         return await self._proxy.recv_msg()
+
+
+class AsyncMessageHandler(Proxy):
+    def __init__(self, proxy):
+        super().__init__(proxy)
+        self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
+        self._requests = get_requests()
+        self._req_stack = []
+
+    def close(self):
+        self._db.close()
 
     async def _send_getapi(self, code_path):
         print('[send_getapi]', code_path)
@@ -344,12 +350,46 @@ class AsyncMessageHandler(object):
         self.close()
 
 
+class AsyncManagerHandler(Proxy):
+    def __init__(self, proxy):
+        super().__init__(proxy)
+        self._executors = []
+
+    def _run_executor(self, uuid1):
+        print('[run_executor]', uuid1)
+        self._executors.append(str(uuid1))
+        self.send_msg(ManagerMessage.RUN, str(uuid1))
+
+    async def process(self):
+        # send RUN message to spawn a new executor
+        self._run_executor(uuid.uuid4())
+
+        while True:
+            msg, data = await self.recv_msg()
+            if msg == ManagerMessage.END:
+                print('[END]', data)
+                uuid1 = data.decode()
+                if uuid1 in self._executors:
+                    print('  - remove from list')
+                    self._executors.remove(uuid1)
+                else:
+                    print('  - cannot find the uuid')
+
+
 async def handle_connect(reader, writer):
     print(f'New connection reader={reader}')
     proxy = MessageProxy(reader, writer)
     msg, data = await proxy.recv_msg()
     print(f'[connect] {msg} {data}')
-    if msg == Message.CONNECT:
+    if msg == ManagerMessage.VERSION:
+        version = data[0]
+        if version != version_number:
+            print(f'Error: version should be {version_number}, but {version}')
+            return
+        print(f'  - version: {version}, eetype: {data[1]}')
+        handler = AsyncManagerHandler(proxy)
+        asyncio.get_event_loop().create_task(handler.process())
+    elif msg == Message.VERSION:
         version = data[0]
         if version != version_number:
             print(f'Error: version should be {version_number}, but {version}')
