@@ -1,2 +1,2 @@
 server:
-	PYTHONPATH=.. python uds_server.py
+	@(cd ..; python -m mock_server)

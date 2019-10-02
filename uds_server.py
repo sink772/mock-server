@@ -15,13 +15,12 @@
 import asyncio
 import os
 import re
-import sys
 import time
-from copy import copy
-from typing import Any, Tuple, Union
+from typing import Any, Tuple
 
 import plyvel
-from mock_server.message_proxy import Message, MessageProxy, int_to_bytes, bytes_to_int
+from .message_proxy import Message, MessageProxy
+from .utils import int_to_bytes, encode_any, TypeTag, Address, decode, decode_any, decode_param
 
 server_address = '/tmp/ee.socket'
 number_of_connections = 1
@@ -37,19 +36,6 @@ STEP_TYPE_EVENT_LOG = 'eventLog'
 STEP_TYPE_API_CALL = 'apiCall'
 
 
-class TypeTag(object):
-    NIL = 0
-    DICT = 1
-    LIST = 2
-    BYTES = 3
-    STRING = 4
-    BOOL = 5
-
-    CUSTOM = 10
-    INT = CUSTOM + 1
-    ADDRESS = CUSTOM
-
-
 class Info(object):
     BLOCK_TIMESTAMP = "B.timestamp"
     BLOCK_HEIGHT = "B.height"
@@ -60,46 +46,6 @@ class Info(object):
     TX_NONCE = "T.nonce"
     STEP_COSTS = "StepCosts"
     CONTRACT_OWNER = "C.owner"
-
-
-class Address(object):
-    def __init__(self, obj):
-        if isinstance(obj, bytes):
-            if len(obj) != 21:
-                raise Exception("IllegalFormat")
-            self.__bytes = copy(obj)
-            self.__check_prefix()
-        elif isinstance(obj, str):
-            if len(obj) != 42:
-                raise Exception("IllegalFormat")
-            prefix = bytes([obj[:2] == "cx"])
-            body = bytes.fromhex(obj[2:])
-            self.__bytes = prefix + body
-        else:
-            raise Exception(f"IllegalFormat: type={type(obj)}")
-
-    @staticmethod
-    def from_str(s: str) -> 'Address':
-        if len(s) != 42:
-            raise Exception("IllegalFormat")
-        prefix = bytes([s[:2] == "cx"])
-        body = bytes.fromhex(s[2:])
-        return Address(prefix + body)
-
-    def to_bytes(self):
-        return copy(self.__bytes)
-
-    def __str__(self):
-        body = self.__bytes[1:].hex()
-        if self.__bytes[0] == 0:
-            return "hx" + body
-        else:
-            return "cx" + body
-
-    def __check_prefix(self):
-        prefix = self.__bytes[0]
-        if prefix != 0 and prefix != 1:
-            raise Exception(f"IllegalFormat: prefix={hex(prefix)}")
 
 
 TARGET_ROOT = '/ws/core2/java-executor/target'
@@ -200,87 +146,6 @@ requests_sample_token = [
 def get_requests():
     for req in requests_sample_token:
         yield req
-
-
-def encode_any(o: Any) -> Tuple[int, Any]:
-    if o is None:
-        return TypeTag.NIL, b''
-    elif isinstance(o, dict):
-        m = {}
-        for k, v in o.items():
-            m[k] = encode_any(v)
-        return TypeTag.DICT, m
-    elif isinstance(o, list) or isinstance(o, tuple):
-        lst = []
-        for v in o:
-            lst.append(encode_any(v))
-        return TypeTag.LIST, lst
-    elif isinstance(o, bytes):
-        return TypeTag.BYTES, o
-    elif isinstance(o, str):
-        return TypeTag.STRING, o.encode('utf-8')
-    elif isinstance(o, bool):
-        if o:
-            return TypeTag.BOOL, b'\x01'
-        else:
-            return TypeTag.BOOL, b'\x00'
-    elif isinstance(o, int):
-        return TypeTag.INT, int_to_bytes(o)
-    elif isinstance(o, Address):
-        return TypeTag.ADDRESS, o.to_bytes()
-    else:
-        raise Exception(f"UnknownType: {type(o)}")
-
-
-def decode(tag: int, val: bytes) -> 'Any':
-    if tag == TypeTag.BYTES:
-        return val
-    elif tag == TypeTag.STRING:
-        return val.decode('utf-8')
-    elif tag == TypeTag.INT:
-        return bytes_to_int(val)
-    elif tag == TypeTag.BOOL:
-        if val == b'\x00':
-            return False
-        elif val == b'\x01':
-            return True
-        else:
-            raise Exception(f'IllegalBoolBytes{val.hex()})')
-    elif tag == TypeTag.ADDRESS:
-        return Address(val)
-    else:
-        raise Exception(f"UnknownType: {tag}")
-
-
-def decode_any(to: list) -> Any:
-    tag: int = to[0]
-    val: Union[bytes, dict, list] = to[1]
-    if tag == TypeTag.NIL:
-        return None
-    elif tag == TypeTag.DICT:
-        obj = {}
-        for k, v in val.items():
-            if isinstance(k, bytes):
-                k = k.decode('utf-8')
-            obj[k] = decode_any(v)
-        return obj
-    elif tag == TypeTag.LIST:
-        obj = []
-        for v in val:
-            obj.append(decode_any(v))
-        return obj
-    else:
-        return decode(tag, val)
-
-
-def decode_param(typ: str, val: bytes) -> Any:
-    # print(f'  ** typ={typ} val={val} len={len(val)}')
-    if typ == 'Address':
-        return decode(TypeTag.ADDRESS, val)
-    elif typ == 'int':
-        return decode(TypeTag.INT, val)
-    elif typ == 'bytes':
-        return decode(TypeTag.BYTES, val)
 
 
 class AsyncMessageHandler(object):
@@ -507,10 +372,3 @@ def async_main():
         loop.run_forever()
     finally:
         loop.close()
-
-
-if __name__ == "__main__":
-    try:
-        sys.exit(async_main())
-    except KeyboardInterrupt:
-        print("exit")

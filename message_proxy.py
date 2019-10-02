@@ -17,15 +17,6 @@ from typing import Any, Tuple
 import msgpack
 
 
-def int_to_bytes(v: int) -> bytes:
-    n_bytes = ((v + (v < 0)).bit_length() + 8) // 8
-    return v.to_bytes(n_bytes, byteorder="big", signed=True)
-
-
-def bytes_to_int(v: bytes) -> int:
-    return int.from_bytes(v, "big", signed=True)
-
-
 class Message(object):
     CONNECT = 0
     INVOKE = 1
