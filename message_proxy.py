@@ -61,5 +61,13 @@ class MessageProxy(object):
 
     async def recv_msg(self) -> Tuple[int, Any]:
         data = await self.read()
-        msg = msgpack.unpackb(data)
-        return msg[0], msg[1]
+        while True:
+            try:
+                msg = msgpack.unpackb(data)
+                return msg[0], msg[1]
+            except ValueError as e:
+                if str(e).find('incomplete input') > 0 and data != b'':
+                    data2 = await self.read()
+                    data += data2
+                else:
+                    raise e

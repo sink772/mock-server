@@ -354,6 +354,7 @@ class AsyncManagerHandler(Proxy):
     def __init__(self, proxy):
         super().__init__(proxy)
         self._executors = []
+        self._loop = 3
 
     def _run_executor(self, uuid1):
         print('[run_executor]', uuid1)
@@ -372,8 +373,18 @@ class AsyncManagerHandler(Proxy):
                 if uuid1 in self._executors:
                     print('  - remove from list')
                     self._executors.remove(uuid1)
+                    self._loop -= 1
                 else:
                     print('  - cannot find the uuid')
+
+                if self._loop > 0:
+                    # send RUN message to spawn a new executor
+                    self._run_executor(uuid.uuid4())
+                else:
+                    print('  - executors:', self._executors)
+            else:
+                print(f'Invalid message received: {msg}')
+                break
 
 
 async def handle_connect(reader, writer):
@@ -394,8 +405,7 @@ async def handle_connect(reader, writer):
         if version != version_number:
             print(f'Error: version should be {version_number}, but {version}')
             return
-        uuid = data[1]
-        print(f'  - version: {version}, uuid: {uuid}, eetype: {data[2]}')
+        print(f'  - version: {version}, uuid: {data[1]}, eetype: {data[2]}')
         handler = AsyncMessageHandler(proxy)
         asyncio.get_event_loop().create_task(handler.process())
 
