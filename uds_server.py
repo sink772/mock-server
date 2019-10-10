@@ -53,8 +53,8 @@ TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
 PLYVEL_DB_PATH = SAMPLE_TOKEN + '/db'
-token_score_origin = SAMPLE_TOKEN + '/dapp.jar'
-token_score_path = SAMPLE_TOKEN + '/optimized-debug.jar'
+token_score_origin = SAMPLE_TOKEN + '/optimized'
+token_score_path = SAMPLE_TOKEN + '/transformed'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -66,7 +66,7 @@ alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 requests_sample_token = [
     # === Java deployment ===
     [
-        token_score_path,
+        token_score_origin,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
@@ -77,7 +77,7 @@ requests_sample_token = [
     ],
     # TODO: initialize the contract (this should be combined with the '<install>' command later
     [
-        token_score_path,
+        token_score_origin,
         False,
         owner_address.to_bytes(),
         token_score_address.to_bytes(),
@@ -306,7 +306,13 @@ class AsyncMessageHandler(Proxy):
 
     async def process(self):
         # send GETAPI first
-        await self._send_getapi(token_score_origin)
+        try:
+            await self._send_getapi(token_score_origin)
+        except Exception as e:
+            print(e)
+            self.close()
+            print('Exiting process()\n')
+            return
 
         # send first invoke request
         self._send_request(next(self._requests))
