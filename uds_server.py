@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import hashlib
 import os
 import re
 import time
@@ -65,17 +66,6 @@ alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 
 requests_sample_token = [
     # === Java deployment ===
-    [
-        token_score_origin,
-        False,
-        owner_address.to_bytes(),
-        token_score_address.to_bytes(),
-        int_to_bytes(0),
-        int_to_bytes(10_000_000),
-        '<install>',
-        []
-    ],
-    # TODO: initialize the contract (this should be combined with the '<install>' command later
     [
         token_score_origin,
         False,
@@ -304,6 +294,31 @@ class AsyncMessageHandler(Proxy):
         for v in data:
             print(f'  -- {decode_param(params.pop(0), v)}')
 
+    def _handle_setcode(self, code):
+        print(f'[handle_setcode] len={len(code)}')
+        with open(token_score_path + '/code.jar', 'wb') as f:
+            f.write(code)
+
+    def _handle_getobjgraph(self, flags):
+        print(f'[handle_getobjgraph] {flags}')
+        with open(token_score_path + '/graph', 'rb') as f:
+            graph = f.read()
+        graph_hash = hashlib.sha3_256(graph).digest()
+        if flags == 0x1:
+            self.send_msg(Message.GETOBJGRAPH, [self._next_hash, graph_hash, graph])
+        else:
+            self.send_msg(Message.GETOBJGRAPH, [self._next_hash, graph_hash])
+
+    def _handle_setobjgraph(self, data):
+        print(f'[handle_setobjgraph]')
+        flags = data[0]
+        self._next_hash = data[1]
+        graph = data[2]
+        print(f'  -- flags={flags}, next_hash={self._next_hash}, graph len={len(graph)}')
+        if flags == 0x1:
+            with open(token_score_path + '/graph', 'wb') as f:
+                f.write(graph)
+
     async def process(self):
         # send GETAPI first
         try:
@@ -346,6 +361,12 @@ class AsyncMessageHandler(Proxy):
                 self._handle_getbalance(data)
             elif msg == Message.EVENT:
                 self._handle_event(data)
+            elif msg == Message.SETCODE:
+                self._handle_setcode(data)
+            elif msg == Message.GETOBJGRAPH:
+                self._handle_getobjgraph(data)
+            elif msg == Message.SETOBJGRAPH:
+                self._handle_setobjgraph(data)
             elif msg == Message.LOG:
                 print('[LOG]', data)
             else:

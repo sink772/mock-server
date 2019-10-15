@@ -36,6 +36,9 @@ class Message(object):
     GETAPI = 9
     LOG = 10
     CLOSE = 11
+    SETCODE = 12
+    GETOBJGRAPH = 13
+    SETOBJGRAPH = 14
 
 
 class MessageProxy(object):
