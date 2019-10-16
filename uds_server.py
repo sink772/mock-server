@@ -214,7 +214,7 @@ class AsyncMessageHandler(Proxy):
                 STEP_TYPE_API_CALL: 10000,
             }
         }
-        print(f'info -> {encode_any(info)}')
+        # print(f'info -> {encode_any(info)}')
         self.send_msg(Message.GETINFO, encode_any(info))
 
     def _handle_call(self, data):

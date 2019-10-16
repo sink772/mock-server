@@ -72,6 +72,9 @@ class Address(object):
         else:
             return "cx" + body
 
+    def __repr__(self):
+        return self.__str__()
+
     def __check_prefix(self):
         prefix = self.__bytes[0]
         if prefix != 0 and prefix != 1:
