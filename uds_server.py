@@ -296,6 +296,8 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_setcode(self, code):
         print(f'[handle_setcode] len={len(code)}')
+        if not os.path.exists(token_score_path):
+            os.makedirs(token_score_path)
         with open(token_score_path + '/code.jar', 'wb') as f:
             f.write(code)
 
