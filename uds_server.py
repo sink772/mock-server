@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import copy
 import hashlib
 import os
 import re
@@ -175,7 +176,8 @@ class AsyncMessageHandler(Proxy):
         else:
             raise Exception(f'GETAPI failed: {status}')
 
-    def _send_request(self, req):
+    def _send_request(self, req_orig):
+        req = copy.copy(req_orig)
         print('\n[send_request]', req)
         print(f'  >>> method: {req[6]}')
         print(f'      params: {req[7]}')
