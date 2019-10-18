@@ -65,15 +65,12 @@ class Address(object):
     def to_bytes(self):
         return copy(self.__bytes)
 
-    def __str__(self):
+    def __repr__(self):
         body = self.__bytes[1:].hex()
         if self.__bytes[0] == 0:
             return "hx" + body
         else:
             return "cx" + body
-
-    def __repr__(self):
-        return self.__str__()
 
     def __check_prefix(self):
         prefix = self.__bytes[0]
