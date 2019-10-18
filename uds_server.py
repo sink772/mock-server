@@ -265,11 +265,11 @@ class AsyncMessageHandler(Proxy):
         ])
 
     def _handle_setvalue(self, data):
-        print('[handle_setvalue]', data)
         key = data[0]
+        print('[handle_setvalue]', key)
         is_delete = data[1]
         value = data[2]
-        print(f'  -- setvalue -> {key}, {is_delete}, {value}')
+        print(f'  -- setvalue -> {is_delete}, {value}')
         if is_delete:
             self._db.delete(key)
         else:
@@ -310,14 +310,16 @@ class AsyncMessageHandler(Proxy):
         graph_hash = hashlib.sha3_256(graph).digest()
         if flags == 0x1:
             self.send_msg(Message.GETOBJGRAPH, [self._next_hash, graph_hash, graph])
+            print(f'  -- next_hash={self._next_hash}, graph len={len(graph)}')
         else:
-            self.send_msg(Message.GETOBJGRAPH, [self._next_hash, graph_hash])
+            self.send_msg(Message.GETOBJGRAPH, [self._next_hash, graph_hash, None])
+            print(f'  -- next_hash={self._next_hash}, graph=None')
 
     def _handle_setobjgraph(self, data):
         print(f'[handle_setobjgraph]')
         flags = data[0]
         self._next_hash = data[1]
-        graph = data[2]
+        graph = data[2] if flags == 0x1 else b''
         print(f'  -- flags={flags}, next_hash={self._next_hash}, graph len={len(graph)}')
         if flags == 0x1:
             with open(token_score_path + '/graph', 'wb') as f:
