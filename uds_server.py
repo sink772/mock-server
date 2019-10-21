@@ -82,7 +82,7 @@ requests_sample_token = [
     [
         token_score_path,
         True,
-        owner_address.to_bytes(),
+        None,
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
@@ -114,7 +114,7 @@ requests_sample_token = [
     [
         token_score_path,
         True,
-        owner_address.to_bytes(),
+        None,
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
@@ -125,7 +125,7 @@ requests_sample_token = [
     [
         token_score_path,
         True,
-        owner_address.to_bytes(),
+        None,
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
@@ -238,6 +238,12 @@ class AsyncMessageHandler(Proxy):
                 STEP_TYPE_API_CALL: 10000,
             }
         }
+        if self._req_stack[-1][1]:
+            # set the following fields as None if this is a query request
+            info[Info.TX_HASH] = None
+            info[Info.TX_FROM] = None
+            info[Info.TX_TIMESTAMP] = None
+            info[Info.TX_NONCE] = None
         # print(f'info -> {encode_any(info)}')
         self.send_msg(Message.GETINFO, encode_any(info))
 
