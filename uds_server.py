@@ -17,6 +17,7 @@ import copy
 import hashlib
 import os
 import re
+import shutil
 import time
 import uuid
 from typing import Any, Tuple
@@ -26,7 +27,6 @@ from .message_proxy import Message, ManagerMessage, MessageProxy
 from .utils import int_to_bytes, encode_any, TypeTag, Address, decode, decode_any, decode_param
 
 server_address = '/tmp/ee.socket'
-number_of_connections = 1
 version_number = 1
 
 STEP_TYPE_CONTRACT_CALL = 'contractCall'
@@ -65,6 +65,8 @@ crowdsale_address = Address('cx0000abcd31e819838e1f308287f9530150200000')
 owner_address = Address('hxe7af5fcfd8dfc67530a01a0e403882687528dfcb')
 alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 
+ICX = 10 ** 18
+
 requests_sample_token = [
     # === Java deployment ===
     [
@@ -85,7 +87,8 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'balanceOf',
-        [owner_address]
+        [owner_address],
+        1000 * ICX
     ],
     # transfer some tokens to Alice
     [
@@ -96,7 +99,7 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [alice_address, 10**18, b'Hello']
+        [alice_address, ICX, b'Hello']
     ],
     [
         token_score_path,
@@ -106,7 +109,7 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [Address('hx' + 'b'*40), 10**18, b'']
+        [Address('hx' + 'b'*40), ICX, b'']
     ],
     [
         token_score_path,
@@ -116,7 +119,19 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'balanceOf',
-        [owner_address]
+        [alice_address],
+        ICX
+    ],
+    [
+        token_score_path,
+        True,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'balanceOf',
+        [owner_address],
+        (1000 - 2) * ICX
     ],
 ]
 
@@ -178,13 +193,15 @@ class AsyncMessageHandler(Proxy):
 
     def _send_request(self, req_orig):
         req = copy.copy(req_orig)
+        self._req_stack.append(req)
+        if req[1] and len(req) == 9:
+            req = req[:-1]
         print('\n[send_request]', req)
         print(f'  >>> method: {req[6]}')
         print(f'      params: {req[7]}')
         if isinstance(req[7], list):
             req[7] = encode_any(req[7])
         self.send_msg(Message.INVOKE, req)
-        self._req_stack.append(req)
 
     def _handle_result(self, data):
         print('[handle_result]', data)
@@ -192,6 +209,11 @@ class AsyncMessageHandler(Proxy):
         step_used = decode(TypeTag.INT, data[1])
         ret = decode_any(data[2])
         print(f'  <<< {status}, {step_used}, {ret}')
+        req: list = self._req_stack.pop()
+        if req[1] and len(req) == 9:
+            expected = req.pop(-1)
+            if expected is not None and expected != ret:
+                raise Exception(f'expected={expected}, ret={ret}')
         return status
 
     def _handle_getinfo(self, data):
@@ -342,7 +364,6 @@ class AsyncMessageHandler(Proxy):
             msg, data = await self.recv_msg()
             if msg == Message.RESULT:
                 failed = self._handle_result(data)
-                self._req_stack.pop()
                 if len(self._req_stack) > 0:
                     self.send_msg(Message.RESULT, data)
                 else:
@@ -439,6 +460,9 @@ async def handle_connect(reader, writer):
             print(f'Error: version should be {version_number}, but {version}')
             return
         print(f'  - version: {version}, uuid: {data[1]}, eetype: {data[2]}')
+        # start test with the clean db
+        if os.path.exists(PLYVEL_DB_PATH):
+            shutil.rmtree(PLYVEL_DB_PATH)
         handler = AsyncMessageHandler(proxy)
         asyncio.get_event_loop().create_task(handler.process())
 
