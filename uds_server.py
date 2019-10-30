@@ -179,9 +179,14 @@ class AsyncMessageHandler(Proxy):
     async def _send_getapi(self, code_path):
         print('[send_getapi]', code_path)
         self.send_msg(Message.GETAPI, code_path)
-        msg, data = await self.recv_msg()
-        if msg != Message.GETAPI:
-            raise Exception(f'Unexpected Msg: {msg} != {Message.GETAPI}')
+        while True:
+            msg, data = await self.recv_msg()
+            if msg == Message.LOG:
+                print('[LOG]', data)
+            elif msg == Message.GETAPI:
+                break
+            else:
+                raise Exception(f'Unexpected Msg: {msg} != {Message.GETAPI} or {Message.LOG}')
         print(f'getapi ->')
         status: int = data[0]
         info: list = data[1]
