@@ -167,6 +167,8 @@ class Proxy(object):
 
 
 class AsyncMessageHandler(Proxy):
+    _log_levels = ['PANIC', 'FATAL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE']
+
     def __init__(self, proxy):
         super().__init__(proxy)
         self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
@@ -182,7 +184,7 @@ class AsyncMessageHandler(Proxy):
         while True:
             msg, data = await self.recv_msg()
             if msg == Message.LOG:
-                print('[LOG]', data)
+                self._handle_log(data)
             elif msg == Message.GETAPI:
                 break
             else:
@@ -329,6 +331,10 @@ class AsyncMessageHandler(Proxy):
         for v in data:
             print(f'  -- {decode_param(params.pop(0), v)}')
 
+    def _handle_log(self, data):
+        level, msg = data[0], data[1]
+        print('[log]', self._log_levels[level], msg.decode())
+
     def _handle_setcode(self, code):
         print(f'[handle_setcode] len={len(code)}')
         if not os.path.exists(token_score_path):
@@ -399,14 +405,14 @@ class AsyncMessageHandler(Proxy):
                 self._handle_getbalance(data)
             elif msg == Message.EVENT:
                 self._handle_event(data)
+            elif msg == Message.LOG:
+                self._handle_log(data)
             elif msg == Message.SETCODE:
                 self._handle_setcode(data)
             elif msg == Message.GETOBJGRAPH:
                 self._handle_getobjgraph(data)
             elif msg == Message.SETOBJGRAPH:
                 self._handle_setobjgraph(data)
-            elif msg == Message.LOG:
-                print('[LOG]', data)
             else:
                 print(f'Invalid message received: {msg}')
                 break
