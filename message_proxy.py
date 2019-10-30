@@ -49,6 +49,7 @@ class MessageProxy(object):
     def __init__(self, reader, writer):
         self._reader = reader
         self._writer = writer
+        self._unpacker = msgpack.Unpacker()
 
     def write(self, b: bytes) -> None:
         self._writer.write(b)
@@ -63,14 +64,13 @@ class MessageProxy(object):
         self.write(msgpack.packb(payload))
 
     async def recv_msg(self) -> Tuple[int, Any]:
-        data = await self.read()
         while True:
             try:
-                msg = msgpack.unpackb(data)
-                return msg[0], msg[1]
-            except ValueError as e:
-                if str(e).find('incomplete input') > 0 and data != b'':
-                    data2 = await self.read()
-                    data += data2
-                else:
-                    raise e
+                msg = self._unpacker.unpack()
+            except msgpack.OutOfData as e:
+                data = await self.read()
+                if data == b'':
+                    raise ValueError('no more data')
+                self._unpacker.feed(data)
+                continue
+            return msg[0], msg[1]
