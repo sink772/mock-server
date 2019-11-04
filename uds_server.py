@@ -47,6 +47,7 @@ class Info(object):
     TX_FROM = "T.from"
     TX_TIMESTAMP = "T.timestamp"
     TX_NONCE = "T.nonce"
+    REVISION = "Revision"
     STEP_COSTS = "StepCosts"
     CONTRACT_OWNER = "C.owner"
 
@@ -68,7 +69,6 @@ alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 ICX = 10 ** 18
 
 requests_sample_token = [
-    # === Java deployment ===
     [
         token_score_origin,
         False,
@@ -135,20 +135,6 @@ requests_sample_token = [
     ],
 ]
 
-# # === Python deployment ===
-# requests_sample_token_py = [
-#     [
-#         token_score_path,
-#         False,
-#         owner_address.to_bytes(),
-#         token_score_address.to_bytes(),
-#         int_to_bytes(0),
-#         int_to_bytes(10_000_000),
-#         'on_install',
-#         [1000, 9]
-#     ],
-# ]
-
 
 def get_requests():
     for req in requests_sample_token:
@@ -208,6 +194,7 @@ class AsyncMessageHandler(Proxy):
         print(f'      params: {req[7]}')
         if isinstance(req[7], list):
             req[7] = encode_any(req[7])
+        req.append(encode_any(self._get_info(req[1])))
         self.send_msg(Message.INVOKE, req)
 
     def _handle_result(self, data):
@@ -223,8 +210,7 @@ class AsyncMessageHandler(Proxy):
                 raise Exception(f'expected={expected}, ret={ret}')
         return status
 
-    def _handle_getinfo(self, data):
-        print('[handle_getinfo]', data)
+    def _get_info(self, is_query: bool) -> dict:
         info = {
             Info.TX_INDEX: 0,
             Info.TX_HASH: bytes.fromhex('49a1149d2e607c1b08f17f587d8a99c5a675f8e7eaae13d33a7df57aefeeae4f'),
@@ -234,6 +220,7 @@ class AsyncMessageHandler(Proxy):
             Info.BLOCK_HEIGHT: 0x100,
             Info.BLOCK_TIMESTAMP: int(time.time() * 10**6),
             Info.CONTRACT_OWNER: owner_address,
+            Info.REVISION: 4,
             Info.STEP_COSTS: {
                 STEP_TYPE_CONTRACT_CALL: 25_000,
                 STEP_TYPE_GET: 0,
@@ -245,14 +232,14 @@ class AsyncMessageHandler(Proxy):
                 STEP_TYPE_API_CALL: 10000,
             }
         }
-        if self._req_stack[-1][1]:
+        if is_query:
             # set the following fields as None if this is a query request
             info[Info.TX_HASH] = None
             info[Info.TX_FROM] = None
-            info[Info.TX_TIMESTAMP] = None
-            info[Info.TX_NONCE] = None
+            info[Info.TX_TIMESTAMP] = 0
+            info[Info.TX_NONCE] = 0
         # print(f'info -> {encode_any(info)}')
-        self.send_msg(Message.GETINFO, encode_any(info))
+        return info
 
     def _handle_call(self, data):
         print('\n[handle_call]', data)
@@ -318,8 +305,7 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_event(self, events):
         print(f'[handle_event] -> {events}')
-        indexed = events[0]
-        data = events[1]
+        indexed, data = events[0], events[1]
         sig = indexed[0]
         print('Indexed:')
         print(f'  -- {sig.decode()}')
@@ -393,8 +379,6 @@ class AsyncMessageHandler(Proxy):
                         print('End of requests.\n')
                         self.send_msg(Message.CLOSE, b'')
                         break
-            elif msg == Message.GETINFO:
-                self._handle_getinfo(data)
             elif msg == Message.CALL:
                 self._handle_call(data)
             elif msg == Message.GETVALUE:
