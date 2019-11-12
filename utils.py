@@ -80,7 +80,7 @@ class Address(object):
 
 def encode_any(o: Any) -> Tuple[int, Any]:
     if o is None:
-        return TypeTag.NIL, b''
+        return TypeTag.NIL, None
     elif isinstance(o, dict):
         m = {}
         for k, v in o.items():

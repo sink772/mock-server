@@ -109,7 +109,7 @@ requests_sample_token = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'transfer',
-        [Address('hx' + 'b'*40), ICX, b'']
+        [Address('hx' + 'b'*40), ICX, None]
     ],
     [
         token_score_path,
