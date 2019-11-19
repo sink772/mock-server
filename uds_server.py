@@ -55,9 +55,12 @@ class Info(object):
 TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
-PLYVEL_DB_PATH = SAMPLE_TOKEN + '/db'
+COLLECTION = TARGET_ROOT + '/collection'
+PLYVEL_DB_PATH = TARGET_ROOT + '/db'
 token_score_origin = SAMPLE_TOKEN + '/optimized'
 token_score_path = SAMPLE_TOKEN + '/transformed'
+collection_origin = COLLECTION + '/optimized'
+collection_path = COLLECTION + '/transformed'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
@@ -68,7 +71,7 @@ alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
 
 ICX = 10 ** 18
 
-requests_sample_token = [
+requests = [
     [
         token_score_origin,
         False,
@@ -133,11 +136,20 @@ requests_sample_token = [
         [owner_address],
         (1000 - 2) * ICX
     ],
+    [
+        collection_origin,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'onInstall',
+        []
+    ],
 ]
 
-
 def get_requests():
-    for req in requests_sample_token:
+    for req in requests:
         yield req
 
 
