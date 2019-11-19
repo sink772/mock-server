@@ -403,6 +403,7 @@ class AsyncMessageHandler(Proxy):
 
         # cleanup
         self.close()
+        asyncio.get_running_loop().stop()
 
 
 class AsyncManagerHandler(Proxy):
