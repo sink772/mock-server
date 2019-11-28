@@ -63,6 +63,7 @@ collection_origin = COLLECTION + '/optimized'
 collection_path = COLLECTION + '/transformed'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
+collection_address = Address('cxff4b61a531e819838e1f308287f953015020000a')
 crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
 crowdsale_address = Address('cx0000abcd31e819838e1f308287f9530150200000')
 
@@ -137,14 +138,58 @@ requests = [
         (1000 - 2) * ICX
     ],
     [
+        token_score_path,
+        True,
+        None,
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'totalSupply',
+        [],
+        1000000000000000000000,
+    ],
+    [
         collection_origin,
         False,
         owner_address.to_bytes(),
-        token_score_address.to_bytes(),
+        collection_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'onInstall',
         []
+    ],
+    [
+        collection_path,
+        True,
+        None,
+        collection_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'getInt',
+        [],
+        11,
+    ],
+    [
+        collection_path,
+        True,
+        None,
+        collection_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'totalSupply2',
+        [],
+        1000000000000000000000,
+    ],
+    [
+        collection_path,
+        True,
+        None,
+        collection_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'balanceOf2',
+        [owner_address],
+        (1000 - 2) * ICX,
     ],
 ]
 
@@ -152,6 +197,13 @@ def get_requests():
     for req in requests:
         yield req
 
+def get_path(p):
+    if p==token_score_path or p==token_score_origin:
+        return token_score_path
+    elif p==collection_path or p==collection_origin:
+        return collection_path
+    else:
+        return None
 
 class Proxy(object):
     def __init__(self, proxy):
@@ -262,11 +314,24 @@ class AsyncMessageHandler(Proxy):
         params = decode_any(data[4])
         print(f'  -- to={addr_to} value={value} limit={limit} method={method} params={params}')
 
-        if addr_to == crowdsale_address:
+        if addr_to.to_bytes() == crowdsale_address.to_bytes():
             req = [
                 crowdsale_path,
                 False,
                 token_score_address.to_bytes(),
+                addr_to.to_bytes(),
+                int_to_bytes(value),
+                int_to_bytes(limit),
+                method,
+                params
+            ]
+            self._send_request(req)
+        elif addr_to.to_bytes() == token_score_address.to_bytes():
+            print(f' call for token_score_address')
+            req = [
+                token_score_path,
+                False,
+                collection_address.to_bytes(),
                 addr_to.to_bytes(),
                 int_to_bytes(value),
                 int_to_bytes(limit),
@@ -335,14 +400,16 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_setcode(self, code):
         print(f'[handle_setcode] len={len(code)}')
-        if not os.path.exists(token_score_path):
-            os.makedirs(token_score_path)
-        with open(token_score_path + '/code.jar', 'wb') as f:
+        path = get_path(self._req_stack[-1][0])
+        if not os.path.exists(path):
+            os.makedirs(path)
+        with open(path + '/code.jar', 'wb') as f:
             f.write(code)
 
     def _handle_getobjgraph(self, flags):
         print(f'[handle_getobjgraph] {flags}')
-        with open(token_score_path + '/graph', 'rb') as f:
+        path = get_path(self._req_stack[-1][0])
+        with open(path + '/graph', 'rb') as f:
             graph = f.read()
         graph_hash = hashlib.sha3_256(graph).digest()
         if flags == 0x1:
@@ -354,18 +421,20 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_setobjgraph(self, data):
         print(f'[handle_setobjgraph]')
+        path = get_path(self._req_stack[-1][0])
         flags = data[0]
         self._next_hash = data[1]
         graph = data[2] if flags == 0x1 else b''
         print(f'  -- flags={flags}, next_hash={self._next_hash}, graph len={len(graph)}')
         if flags == 0x1:
-            with open(token_score_path + '/graph', 'wb') as f:
+            with open(path + '/graph', 'wb') as f:
                 f.write(graph)
 
     async def process(self):
         # send GETAPI first
         try:
             await self._send_getapi(token_score_origin)
+            await self._send_getapi(collection_origin)
         except Exception as e:
             print(e)
             self.close()
