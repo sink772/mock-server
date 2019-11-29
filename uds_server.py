@@ -193,17 +193,20 @@ requests = [
     ],
 ]
 
+
 def get_requests():
     for req in requests:
         yield req
 
+
 def get_path(p):
-    if p==token_score_path or p==token_score_origin:
+    if p == token_score_path or p == token_score_origin:
         return token_score_path
-    elif p==collection_path or p==collection_origin:
+    elif p == collection_path or p == collection_origin:
         return collection_path
     else:
         return None
+
 
 class Proxy(object):
     def __init__(self, proxy):
@@ -274,7 +277,8 @@ class AsyncMessageHandler(Proxy):
                 raise Exception(f'expected={expected}, ret={ret}')
         return status
 
-    def _get_info(self, is_query: bool) -> dict:
+    @staticmethod
+    def _get_info(is_query: bool) -> dict:
         info = {
             Info.TX_INDEX: 0,
             Info.TX_HASH: bytes.fromhex('49a1149d2e607c1b08f17f587d8a99c5a675f8e7eaae13d33a7df57aefeeae4f'),
