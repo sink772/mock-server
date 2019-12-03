@@ -177,7 +177,7 @@ requests = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'totalSupply2',
-        [],
+        [token_score_address],
         1000000000000000000000,
     ],
     [
@@ -188,7 +188,7 @@ requests = [
         int_to_bytes(0),
         int_to_bytes(10_000_000),
         'balanceOf2',
-        [owner_address],
+        [token_score_address, owner_address],
         (1000 - 2) * ICX,
     ],
 ]
