@@ -56,23 +56,26 @@ TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
 COLLECTION = TARGET_ROOT + '/collection'
+CROWDSALE = TARGET_ROOT + '/crowdsale'
 PLYVEL_DB_PATH = TARGET_ROOT + '/db'
 token_score_origin = SAMPLE_TOKEN + '/optimized'
 token_score_path = SAMPLE_TOKEN + '/transformed'
 collection_origin = COLLECTION + '/optimized'
 collection_path = COLLECTION + '/transformed'
+crowdsale_origin = CROWDSALE + '/optimized'
+crowdsale_path = CROWDSALE + '/transformed'
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 collection_address = Address('cxff4b61a531e819838e1f308287f953015020000a')
-crowdsale_path = '/ws/docker/test1/test_score/sample_crowdsale'
-crowdsale_address = Address('cx0000abcd31e819838e1f308287f9530150200000')
+crowdsale_address = Address('cxcdefabcd31e819838e1f308287f953015020000c')
 
 owner_address = Address('hxe7af5fcfd8dfc67530a01a0e403882687528dfcb')
 alice_address = Address('hxca1b18d749e4339e9661061af7e1e6cabcef8a19')
+bob_address = Address('hx27de2916ae5b0240ece63d4ce725f3eb5488e561')
 
 ICX = 10 ** 18
 
-requests = [
+requests_basic = [
     [
         token_score_origin,
         False,
@@ -94,7 +97,6 @@ requests = [
         [owner_address],
         1000 * ICX
     ],
-    # transfer some tokens to Alice
     [
         token_score_path,
         False,
@@ -193,17 +195,99 @@ requests = [
     ],
 ]
 
+requests_crowdsale = [
+    # install sample_token
+    [
+        token_score_origin,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'onInstall',
+        ['MySampleToken', 'MST', 18, 1000]
+    ],
+    # install crowdsale
+    [
+        crowdsale_origin,
+        False,
+        owner_address.to_bytes(),
+        crowdsale_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(10_000_000),
+        'onInstall',
+        [100, token_score_address, 10]
+    ],
+    # transfer all tokens to crowdsale score
+    [
+        token_score_path,
+        False,
+        owner_address.to_bytes(),
+        token_score_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(500_000),
+        'transfer',
+        [crowdsale_address, 1000 * ICX, b'Start crowdsale']
+    ],
+    # send 40 icx to crowdsale score from Alice
+    [
+        crowdsale_path,
+        False,
+        alice_address.to_bytes(),
+        crowdsale_address.to_bytes(),
+        int_to_bytes(40 * ICX),
+        int_to_bytes(500_000),
+        'fallback',
+        []
+    ],
+    # send 60 icx to crowdsale score from Bob
+    [
+        crowdsale_path,
+        False,
+        bob_address.to_bytes(),
+        crowdsale_address.to_bytes(),
+        int_to_bytes(60 * ICX),
+        int_to_bytes(500_000),
+        'fallback',
+        []
+    ],
+    # check if goal reached
+    [
+        crowdsale_path,
+        False,
+        owner_address.to_bytes(),
+        crowdsale_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(500_000),
+        'checkGoalReached',
+        []
+    ],
+    # do safe withdrawal
+    [
+        crowdsale_path,
+        False,
+        owner_address.to_bytes(),
+        crowdsale_address.to_bytes(),
+        int_to_bytes(0),
+        int_to_bytes(500_000),
+        'safeWithdrawal',
+        []
+    ],
+]
+
 
 def get_requests():
-    for req in requests:
+    for req in requests_crowdsale:
         yield req
 
 
-def get_path(p):
-    if p == token_score_path or p == token_score_origin:
+def get_path(to):
+    if to == token_score_address.to_bytes():
         return token_score_path
-    elif p == collection_path or p == collection_origin:
+    elif to == collection_address.to_bytes():
         return collection_path
+    elif to == crowdsale_address.to_bytes():
+        return crowdsale_path
     else:
         return None
 
@@ -227,6 +311,8 @@ class AsyncMessageHandler(Proxy):
         self._db = plyvel.DB(PLYVEL_DB_PATH, create_if_missing=True)
         self._requests = get_requests()
         self._req_stack = []
+        self._balances = {}
+        self._block_height = 0x100
 
     def close(self):
         self._db.close()
@@ -262,7 +348,13 @@ class AsyncMessageHandler(Proxy):
         if isinstance(req[7], list):
             req[7] = encode_any(req[7])
         req.append(encode_any(self._get_info(req[1])))
+        # transfer icx first
+        if req[6] == 'fallback':
+            addr_to: Address = decode(TypeTag.ADDRESS, req[3])
+            value = decode(TypeTag.INT, req[4])
+            self._add_balance(addr_to, value)
         self.send_msg(Message.INVOKE, req)
+        self._block_height += 2
 
     def _handle_result(self, data):
         print('[handle_result]', data)
@@ -277,15 +369,9 @@ class AsyncMessageHandler(Proxy):
                 raise Exception(f'expected={expected}, ret={ret}')
         return status
 
-    @staticmethod
-    def _get_info(is_query: bool) -> dict:
+    def _get_info(self, is_query: bool) -> dict:
         info = {
-            Info.TX_INDEX: 0,
-            Info.TX_HASH: bytes.fromhex('49a1149d2e607c1b08f17f587d8a99c5a675f8e7eaae13d33a7df57aefeeae4f'),
-            Info.TX_FROM: owner_address,
-            Info.TX_TIMESTAMP: int(time.time() * 10**6),
-            Info.TX_NONCE: 1,
-            Info.BLOCK_HEIGHT: 0x100,
+            Info.BLOCK_HEIGHT: self._block_height,
             Info.BLOCK_TIMESTAMP: int(time.time() * 10**6),
             Info.CONTRACT_OWNER: owner_address,
             Info.REVISION: 4,
@@ -302,12 +388,24 @@ class AsyncMessageHandler(Proxy):
         }
         if is_query:
             # set the following fields as None if this is a query request
+            info[Info.TX_INDEX] = 0
             info[Info.TX_HASH] = None
             info[Info.TX_FROM] = None
             info[Info.TX_TIMESTAMP] = 0
             info[Info.TX_NONCE] = 0
+        else:
+            info[Info.TX_INDEX] = 0
+            info[Info.TX_HASH] = bytes.fromhex('49a1149d2e607c1b08f17f587d8a99c5a675f8e7eaae13d33a7df57aefeeae4f')
+            info[Info.TX_FROM] = Address(self._req_stack[-1][2])
+            info[Info.TX_TIMESTAMP] = int(time.time() * 10**6)
+            info[Info.TX_NONCE] = 1
         # print(f'info -> {encode_any(info)}')
         return info
+
+    def _add_balance(self, _to: Address, _value: int):
+        print(f'[ICX Transfer] value={_value}')
+        bal = self._balances.get(repr(_to), 0)
+        self._balances[repr(_to)] = _value + bal
 
     def _handle_call(self, data):
         print('\n[handle_call]', data)
@@ -318,24 +416,12 @@ class AsyncMessageHandler(Proxy):
         params = decode_any(data[4])
         print(f'  -- to={addr_to} value={value} limit={limit} method={method} params={params}')
 
-        if addr_to.to_bytes() == crowdsale_address.to_bytes():
+        if addr_to.to_bytes() == token_score_address.to_bytes() \
+                or addr_to.to_bytes() == crowdsale_address.to_bytes():
             req = [
-                crowdsale_path,
+                get_path(addr_to.to_bytes()),
                 False,
-                token_score_address.to_bytes(),
-                addr_to.to_bytes(),
-                int_to_bytes(value),
-                int_to_bytes(limit),
-                method,
-                params
-            ]
-            self._send_request(req)
-        elif addr_to.to_bytes() == token_score_address.to_bytes():
-            print(f' call for token_score_address')
-            req = [
-                token_score_path,
-                False,
-                collection_address.to_bytes(),
+                self._req_stack[-1][3],
                 addr_to.to_bytes(),
                 int_to_bytes(value),
                 int_to_bytes(limit),
@@ -344,7 +430,7 @@ class AsyncMessageHandler(Proxy):
             ]
             self._send_request(req)
         elif method == 'fallback':
-            print(f'[ICX Transfer] value={value}')
+            self._add_balance(addr_to, value)
             self.send_msg(Message.RESULT, [
                 0, int_to_bytes(1000), encode_any(None)
             ])
@@ -382,7 +468,8 @@ class AsyncMessageHandler(Proxy):
         print('[handle_getbalance]')
         addr = Address(data)
         print(f'  -- address = {addr}')
-        self.send_msg(Message.GETBALANCE, int_to_bytes(10**18))
+        bal = self._balances.get(repr(addr), 0)
+        self.send_msg(Message.GETBALANCE, int_to_bytes(bal))
 
     def _handle_event(self, events):
         print(f'[handle_event] -> {events}')
@@ -391,12 +478,13 @@ class AsyncMessageHandler(Proxy):
         print('Indexed:')
         print(f'  -- {sig.decode()}')
         result = re.match('(\\S+?)\\((.+)\\)', sig.decode())
-        params: list = result.group(2).split(',')
-        for v in indexed[1:]:
-            print(f'  -- {decode_param(params.pop(0), v)}')
-        print('Data:')
-        for v in data:
-            print(f'  -- {decode_param(params.pop(0), v)}')
+        if result is not None:
+            params: list = result.group(2).split(',')
+            for v in indexed[1:]:
+                print(f'  -- {decode_param(params.pop(0), v)}')
+            print('Data:')
+            for v in data:
+                print(f'  -- {decode_param(params.pop(0), v)}')
 
     def _handle_log(self, data):
         level, msg = data[0], data[1]
@@ -404,7 +492,7 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_setcode(self, code):
         print(f'[handle_setcode] len={len(code)}')
-        path = get_path(self._req_stack[-1][0])
+        path = get_path(self._req_stack[-1][3])
         if not os.path.exists(path):
             os.makedirs(path)
         with open(path + '/code.jar', 'wb') as f:
@@ -412,7 +500,7 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_getobjgraph(self, flags):
         print(f'[handle_getobjgraph] {flags}')
-        path = get_path(self._req_stack[-1][0])
+        path = get_path(self._req_stack[-1][3])
         with open(path + '/graph', 'rb') as f:
             graph = f.read()
         graph_hash = hashlib.sha3_256(graph).digest()
@@ -425,7 +513,7 @@ class AsyncMessageHandler(Proxy):
 
     def _handle_setobjgraph(self, data):
         print(f'[handle_setobjgraph]')
-        path = get_path(self._req_stack[-1][0])
+        path = get_path(self._req_stack[-1][3])
         flags = data[0]
         self._next_hash = data[1]
         graph = data[2] if flags == 0x1 else b''
@@ -439,6 +527,7 @@ class AsyncMessageHandler(Proxy):
         try:
             await self._send_getapi(token_score_origin)
             await self._send_getapi(collection_origin)
+            await self._send_getapi(crowdsale_origin)
         except Exception as e:
             print(e)
             self.close()
