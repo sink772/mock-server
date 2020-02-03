@@ -20,6 +20,7 @@ import re
 import shutil
 import time
 import uuid
+from enum import IntEnum
 from typing import Any, Tuple
 
 import plyvel
@@ -39,6 +40,11 @@ STEP_TYPE_EVENT_LOG = 'eventLog'
 STEP_TYPE_API_CALL = 'apiCall'
 
 
+class ContentType(IntEnum):
+    PYTHON = 0
+    JAVA = 1
+
+
 class Info(object):
     BLOCK_TIMESTAMP = "B.timestamp"
     BLOCK_HEIGHT = "B.height"
@@ -52,18 +58,30 @@ class Info(object):
     CONTRACT_OWNER = "C.owner"
 
 
+CONTENT_TYPE = ContentType.JAVA
 TARGET_ROOT = '/ws/core2/java-executor/target'
 
 SAMPLE_TOKEN = TARGET_ROOT + '/sample_token'
 COLLECTION = TARGET_ROOT + '/collection'
 CROWDSALE = TARGET_ROOT + '/crowdsale'
 PLYVEL_DB_PATH = TARGET_ROOT + '/db'
-token_score_origin = SAMPLE_TOKEN + '/optimized'
-token_score_path = SAMPLE_TOKEN + '/transformed'
-collection_origin = COLLECTION + '/optimized'
-collection_path = COLLECTION + '/transformed'
-crowdsale_origin = CROWDSALE + '/optimized'
-crowdsale_path = CROWDSALE + '/transformed'
+
+if CONTENT_TYPE == ContentType.JAVA:
+    ON_INSTALL = 'onInstall'
+    token_score_origin = SAMPLE_TOKEN + '/optimized'
+    token_score_path = SAMPLE_TOKEN + '/transformed'
+    collection_origin = COLLECTION + '/optimized'
+    collection_path = COLLECTION + '/transformed'
+    crowdsale_origin = CROWDSALE + '/optimized'
+    crowdsale_path = CROWDSALE + '/transformed'
+else:
+    ON_INSTALL = 'on_install'
+    token_score_origin = SAMPLE_TOKEN
+    token_score_path = token_score_origin
+    collection_origin = COLLECTION
+    collection_path = collection_origin
+    crowdsale_origin = CROWDSALE
+    crowdsale_path = crowdsale_origin
 
 token_score_address = Address('cx784b61a531e819838e1f308287f953015020000a')
 collection_address = Address('cxff4b61a531e819838e1f308287f953015020000a')
@@ -83,7 +101,7 @@ requests_basic = [
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
-        'onInstall',
+        ON_INSTALL,
         ['MySampleToken', 'MST', 18, 1000]
     ],
     [
@@ -157,7 +175,7 @@ requests_basic = [
         collection_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
-        'onInstall',
+        ON_INSTALL,
         []
     ],
     [
@@ -204,7 +222,7 @@ requests_crowdsale = [
         token_score_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
-        'onInstall',
+        ON_INSTALL,
         ['MySampleToken', 'MST', 18, 1000]
     ],
     # install crowdsale
@@ -215,7 +233,7 @@ requests_crowdsale = [
         crowdsale_address.to_bytes(),
         int_to_bytes(0),
         int_to_bytes(10_000_000),
-        'onInstall',
+        ON_INSTALL,
         [100, token_score_address, 10]
     ],
     # transfer all tokens to crowdsale score
@@ -526,8 +544,9 @@ class AsyncMessageHandler(Proxy):
         # send GETAPI first
         try:
             await self._send_getapi(token_score_origin)
-            await self._send_getapi(collection_origin)
             await self._send_getapi(crowdsale_origin)
+            if CONTENT_TYPE == ContentType.JAVA:
+                await self._send_getapi(collection_origin)
         except Exception as e:
             print(e)
             self.close()
